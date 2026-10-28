@@ -301,7 +301,21 @@ function afterLoad() {
     }
 }
 
-// ---- The Auto Seed switch, to the right of Extensions ----
+// ---- The Auto Seed switch ----
+
+// In newer versions of ComfyUI, the switch is its own box at the left end of the run bar, styled like the run
+// bar's box and its buttons. Older versions have no run bar, so there it's added to the right of Extensions.
+
+function runBarParts() {
+    // The row the run bar sits in, the run bar's box, and a button in it whose style the switch copies.
+    const row = document.querySelector('[data-testid="top-menu-actionbars"]');
+    const box = row?.querySelector(':scope > [data-testid="action-bar-card"]');
+    const styleButton = box?.querySelector('[data-testid="queue-overlay-toggle"]');
+    if (!row || !box || !styleButton) {
+        return null;
+    }
+    return { row, box, styleButton };
+}
 
 function findButtonByText(text) {
     for (const button of document.querySelectorAll("button")) {
@@ -335,34 +349,43 @@ function updateToggle() {
     if (!container) {
         return;
     }
+    // Only changes what's different, since every change is seen by the watcher that keeps the switch in place.
     const on = autoSeedOn();
     const icon = container.querySelector("i");
-    if (icon) {
-        icon.className = on ? "pi pi-check-square" : "pi pi-stop";
+    const iconClass = on ? "pi pi-check-square" : "pi pi-stop";
+    if (icon && icon.className !== iconClass) {
+        icon.className = iconClass;
     }
     const button = container.querySelector("button");
     if (button) {
-        button.title = on
+        const title = on
             ? "Auto Seed is on: new seeds are picked whenever a workflow opens. Click to turn off."
             : "Auto Seed is off: seeds are only changed by ComfyUI after a run. Click to turn on.";
-        button.setAttribute("aria-pressed", on ? "true" : "false");
+        if (button.title !== title) {
+            button.title = title;
+        }
+        const pressed = on ? "true" : "false";
+        if (button.getAttribute("aria-pressed") !== pressed) {
+            button.setAttribute("aria-pressed", pressed);
+        }
     }
 }
 
-function createToggle(extensionsButton, extensionsWrapper) {
-    // A separate box styled like the one Extensions is in, holding a button styled like Extensions.
-    const container = extensionsWrapper === extensionsButton
-        ? document.createElement("span")
-        : document.createElement(extensionsWrapper.tagName);
+function createToggle(styleButton, boxTag, boxClass, place) {
+    // A separate box, styled like the box it's placed next to, holding a button styled like styleButton.
+    const container = document.createElement(boxTag);
     container.id = TOGGLE_ID;
-    if (extensionsWrapper !== extensionsButton) {
-        container.className = extensionsWrapper.className;
+    container.dataset.place = place;
+    if (boxClass) {
+        container.className = boxClass;
     }
-    container.style.marginLeft = "4px";
+    if (place === "extensions") {
+        container.style.marginLeft = "4px";
+    }
 
     const button = document.createElement("button");
     button.type = "button";
-    button.className = extensionsButton.className;
+    button.className = styleButton.className;
     button.style.display = "inline-flex";
     button.style.alignItems = "center";
     button.style.gap = "6px";
@@ -387,10 +410,40 @@ function createToggle(extensionsButton, extensionsWrapper) {
     return container;
 }
 
+function insertBeforeRunBar(runBar) {
+    let container = document.getElementById(TOGGLE_ID);
+    if (container && container.dataset.place !== "run-bar") {
+        container.remove();
+        container = null;
+    }
+    if (!container) {
+        container = createToggle(runBar.styleButton, "div", runBar.box.className, "run-bar");
+        updateToggle();
+    } else {
+        // Keep matching the style of the run bar if the interface restyles it.
+        const button = container.querySelector("button");
+        if (button && button.className !== runBar.styleButton.className) {
+            button.className = runBar.styleButton.className;
+        }
+        if (container.className !== runBar.box.className) {
+            container.className = runBar.box.className;
+        }
+    }
+    if (runBar.row.firstElementChild !== container) {
+        runBar.row.insertBefore(container, runBar.row.firstElementChild);
+        updateToggle();
+    }
+}
+
 function insertToggle() {
     if (!switchShown()) {
         // Hidden by the "Show the Auto Seed switch" setting. Auto Seed itself still works as set.
         document.getElementById(TOGGLE_ID)?.remove();
+        return;
+    }
+    const runBar = runBarParts();
+    if (runBar) {
+        insertBeforeRunBar(runBar);
         return;
     }
     const extensionsButton = findButtonByText("Extensions");
@@ -399,8 +452,14 @@ function insertToggle() {
     }
     const wrapper = outermostWrapper(extensionsButton);
     let container = document.getElementById(TOGGLE_ID);
+    if (container && container.dataset.place !== "extensions") {
+        container.remove();
+        container = null;
+    }
     if (!container) {
-        container = createToggle(extensionsButton, wrapper);
+        const boxTag = wrapper === extensionsButton ? "span" : wrapper.tagName;
+        const boxClass = wrapper === extensionsButton ? "" : wrapper.className;
+        container = createToggle(extensionsButton, boxTag, boxClass, "extensions");
         updateToggle();
     } else {
         // Keep matching the style of Extensions if the interface restyles it.
@@ -450,7 +509,7 @@ app.registerExtension({
             id: SETTING_SHOW_SWITCH,
             category: ["Auto Seed", "Auto Seed", "Show switch"],
             name: "Show the Auto Seed switch in the toolbar",
-            tooltip: "Shows the Auto Seed on/off switch to the right of Extensions. The option above works either way.",
+            tooltip: "Shows the Auto Seed on/off switch at the left end of the run bar. The option above works either way.",
             type: "boolean",
             defaultValue: true,
             onChange: () => scheduleInsert(),

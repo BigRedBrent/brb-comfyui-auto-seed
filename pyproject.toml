@@ -1,6 +1,6 @@
 [project]
 name = "brb-comfyui-auto-seed"
-version = "1.0.0"
+version = "1.0.1"
 description = "Picks new random seeds when a ComfyUI workflow is opened, for every seed set to randomize."
 license = { file = "LICENSE" }
 
