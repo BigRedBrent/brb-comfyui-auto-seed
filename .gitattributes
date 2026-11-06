@@ -1,5 +1,6 @@
 * text=auto eol=lf
 .gitignore export-ignore
 .gitattributes export-ignore
+.comfyignore export-ignore
 pyproject.toml export-ignore
 .github export-ignore
